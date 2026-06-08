@@ -1,3 +1,16 @@
+---
+title: "Top-k Reverse KL for Distillation: What Normalizing Throws Away"
+date: 2026-06-08
+categories:
+  - blog
+tags:
+  - distillation
+  - reverse-kl
+  - top-k
+  - llm
+permalink: /posts/mass-aware-topk-opd/
+---
+
 # Top-$k$ Reverse KL for Distillation: What Normalizing Throws Away
 
 If you've implemented on-policy distillation for an LLM, you've run into the same wall everyone does. The natural training signal is the reverse KL between the student $p$ and the teacher $q$ at each step, but computing it over a full $100$k–$200$k-token vocabulary, for every position, is expensive. So people reach for a top-$k$ approximation: keep the few tokens that matter, ignore the rest.
