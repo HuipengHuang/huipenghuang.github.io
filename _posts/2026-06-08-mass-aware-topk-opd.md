@@ -173,12 +173,13 @@ We evaluate mass-aware top-k OPD against normalized top-k OPD in a math distilla
 
 A key empirical difference between mass-aware top-k OPD and normalized top-k OPD is their entropy behavior during training.
 
-![Entropy of mass-aware top-k OPD](img.png)
+![Entropy of mass-aware top-k OPD](/images/posts/mass-aware-topk-opd/mass-aware-entropy.png)
+
 
 Entropy of mass-aware top-k OPD
 
-![Entropy of normalized top-k OPD](img_1.png)
 
+![Entropy of normalized top-k OPD](/images/posts/mass-aware-topk-opd/normalized-entropy.png)
 Entropy of normalized top-k OPD
 
 Mass-aware top-k OPD maintains a healthier entropy trajectory, while normalized top-k OPD leads to extremely large entropy. This difference is important because generation at higher temperature is much more sensitive to the shape of the learned distribution. When the model distribution becomes overly flat, high-temperature sampling further amplifies this uncertainty, making the model more likely to sample low-quality tokens.
