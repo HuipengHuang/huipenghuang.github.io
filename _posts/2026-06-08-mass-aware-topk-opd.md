@@ -51,20 +51,20 @@ $$
 The objective is
 
 $$
-L_{\text{full}} = D_{\text{KL}}(p \| q) = \sum_{i \in \mathcal V} p_i \log \frac{p_i}{q_i} = \sum_i p_i r_i.
+L_{\text{full}} = D_{\text{KL}}(p \Vert q) = \sum_{i \in \mathcal V} p_i \log \frac{p_i}{q_i} = \sum_i p_i r_i.
 $$
 
-Differentiating $p_i(\log p_i - \log q_i)$ w.r.t. $p_i$ gives $r_i + 1$. Chaining through the softmax Jacobian and using $\sum_i p_i(r_i + 1) = D_{\text{KL}}(p\|q) + 1$, the $+1$ cancels and we get a clean result:
+Differentiating $p_i(\log p_i - \log q_i)$ w.r.t. $p_i$ gives $r_i + 1$. Chaining through the softmax Jacobian and using $\sum_i p_i(r_i + 1) = D_{\text{KL}}(p \Vert q) + 1$, the $+1$ cancels and we get a clean result:
 
 $$
-\boxed{\;\frac{\partial L_{\text{full}}}{\partial z_j} = p_j\left(\log\frac{p_j}{q_j} - D_{\text{KL}}(p\|q)\right)\;}
+\boxed{\;\frac{\partial L_{\text{full}}}{\partial z_j} = p_j\left(\log\frac{p_j}{q_j} - D_{\text{KL}}(p \Vert q)\right)\;}
 $$
 
 The interpretation is a **relative reweighting**: each logit is compared against the *average* log-ratio (which is just $D_{\text{KL}}$ itself). Tokens where the student is too confident relative to the teacher ($\log(p_j/q_j) > D_{\text{KL}}$) get pushed down; the rest get pushed up. This baseline-subtraction structure shows up in every variant below.
 
 ## Sampling one token: the policy-gradient view
 
-Computing the full sum is exactly what we're trying to avoid. So sample a single token $a \sim p$ and use its log-ratio $r_a = \log(p_a/q_a)$, which is an unbiased estimator of the KL *value*: $\mathbb E_{a\sim p}[r_a] = D_{\text{KL}}(p\|q)$.
+Computing the full sum is exactly what we're trying to avoid. So sample a single token $a \sim p$ and use its log-ratio $r_a = \log(p_a/q_a)$, which is an unbiased estimator of the KL *value*: $\mathbb E_{a\sim p}[r_a] = D_{\text{KL}}(p \Vert q)$.
 
 For the *gradient*, the right estimator is the policy-gradient (REINFORCE) form:
 
@@ -90,12 +90,12 @@ $$
 \bar p_i = \frac{p_i}{P_S}, \quad \bar q_i = \frac{q_i}{Q_S}, \qquad P_S = \sum_{u\in S} p_u, \quad Q_S = \sum_{u\in S} q_u,
 $$
 
-and minimize $L_{\text{top}k} = D_{\text{KL}}(\bar p \| \bar q)$. Because $\bar p$ is just a softmax over the selected logits, the derivation mirrors the full-vocab case on the subset $S$:
+and minimize $L_{\text{top}k} = D_{\text{KL}}(\bar p \Vert \bar q)$. Because $\bar p$ is just a softmax over the selected logits, the derivation mirrors the full-vocab case on the subset $S$:
 
 $$
 \boxed{\;\frac{\partial L_{\text{top}k}}{\partial z_j} =
 \begin{cases}
-\bar p_j\left(\log\dfrac{\bar p_j}{\bar q_j} - D_{\text{KL}}(\bar p\|\bar q)\right), & j \in S,\\[1em]
+\bar p_j\left(\log\dfrac{\bar p_j}{\bar q_j} - D_{\text{KL}}(\bar p \Vert \bar q)\right), & j \in S,\\[1em]
 0, & j \notin S.
 \end{cases}\;}
 $$
@@ -116,7 +116,7 @@ The loss is the KL over the resulting $(k{+}1)$-category distribution:
 
 $$
 L_{\text{MA}} = \sum_{i \in S} p_i \log\frac{p_i}{q_i} + p_\tau \log\frac{p_\tau}{q_\tau}
-= D_{\text{KL}}\!\Big( [\{p_i\}_{i\in S}, p_\tau] \,\big\|\, [\{q_i\}_{i\in S}, q_\tau] \Big).
+= D_{\text{KL}}\!\Big( [\{p_i\}_{i\in S}, p_\tau] \,\big\Vert\, [\{q_i\}_{i\in S}, q_\tau] \Big).
 $$
 
 The name says what it does: it's a top-$k$ objective that stays **aware of the total mass** on the head region, because the tail term compares $p_\tau$ against $q_\tau$ directly — which is exactly the comparison normalized top-$k$ throws away.
@@ -128,13 +128,13 @@ Here's the part that makes this more than a heuristic. Decompose the full revers
 $$
 \sum_{i \notin S} p_i \log\frac{p_i}{q_i}
 = \underbrace{p_\tau \log\frac{p_\tau}{q_\tau}}_{\text{kept by } L_{\text{MA}}}
-+ p_\tau\, D_{\text{KL}}(\tilde p_{\text{tail}} \| \tilde q_{\text{tail}}).
++ p_\tau\, D_{\text{KL}}(\tilde p_{\text{tail}} \Vert \tilde q_{\text{tail}}).
 $$
 
 So the difference between the two objectives is exactly the discarded within-tail divergence:
 
 $$
-\boxed{\; L_{\text{full}} - L_{\text{MA}} = p_\tau\, D_{\text{KL}}(\tilde p_{\text{tail}} \| \tilde q_{\text{tail}}) \ge 0 \quad\Longrightarrow\quad L_{\text{MA}} \le L_{\text{full}} \;}
+\boxed{\; L_{\text{full}} - L_{\text{MA}} = p_\tau\, D_{\text{KL}}(\tilde p_{\text{tail}} \Vert \tilde q_{\text{tail}}) \ge 0 \quad\Longrightarrow\quad L_{\text{MA}} \le L_{\text{full}} \;}
 $$
 
 This isn't an approximation with an unknown sign. $L_{\text{MA}}$ is *literally* the full reverse KL after a deterministic **coarse-graining** of the vocabulary — merge all non-top-$k$ tokens into one bucket. By the log-sum inequality (equivalently the data processing inequality for KL), coarse-graining can never *increase* KL, which gives the bound for free. The slack is explicit and non-negative, and the bound is tight exactly when the student and teacher agree *conditionally* inside the tail, $p_i/p_\tau = q_i/q_\tau$ for all $i \notin S$.
@@ -153,7 +153,7 @@ p_j\left(\log\dfrac{p_\tau}{q_\tau} - L_{\text{MA}}\right), & j \notin S.
 \end{cases}\;}
 $$
 
-Two things to notice. On the head, this is **exactly the full-vocab gradient form**, with the baseline $D_{\text{KL}}(p\|q)$ replaced by the coarse-grained loss $L_{\text{MA}}$. On the tail, every outside token shares one log-ratio $\log(p_\tau/q_\tau)$ — the objective can't tell individual tail tokens apart, but it *does* give them a nonzero, common-signed gradient. When the student over-allocates to the tail ($\log(p_\tau/q_\tau) > L_{\text{MA}}$), all outside logits are pushed down together; when it under-allocates, they're pushed up together. The total outside mass is steered toward $q_\tau$.
+Two things to notice. On the head, this is **exactly the full-vocab gradient form**, with the baseline $D_{\text{KL}}(p \Vert q)$ replaced by the coarse-grained loss $L_{\text{MA}}$. On the tail, every outside token shares one log-ratio $\log(p_\tau/q_\tau)$ — the objective can't tell individual tail tokens apart, but it *does* give them a nonzero, common-signed gradient. When the student over-allocates to the tail ($\log(p_\tau/q_\tau) > L_{\text{MA}}$), all outside logits are pushed down together; when it under-allocates, they're pushed up together. The total outside mass is steered toward $q_\tau$.
 
 ### Mass-aware vs normalized, precisely
 
@@ -170,9 +170,9 @@ All four objectives share the same baseline-subtracted gradient structure; they 
 
 | Objective | Gradient $\partial L / \partial z_j$ | Lower bound on $L_{\text{full}}$? | Mass-aware? |
 |---|---|---|---|
-| **Full-vocabulary** | $p_j\big(\log\frac{p_j}{q_j} - D_{\text{KL}}(p\|q)\big)$ | — (it *is* the target) | yes |
+| **Full-vocabulary** | $p_j\big(\log\frac{p_j}{q_j} - D_{\text{KL}}(p \Vert q)\big)$ | — (it *is* the target) | yes |
 | **Sampled-token** | $\big(\log\frac{p_a}{q_a}\big)(\mathbf 1[j{=}a] - p_j)$, unbiased for the above | unbiased estimator | yes (in expectation) |
-| **Normalized top-$k$** | $\bar p_j\big(\log\frac{\bar p_j}{\bar q_j} - D_{\text{KL}}(\bar p\|\bar q)\big)$ on $S$, else $0$ | **no** | **no** |
-| **Mass-aware top-$k$** | $p_j\big(\log\frac{p_j}{q_j} - L_{\text{MA}}\big)$ on $S$;  $p_j\big(\log\frac{p_\tau}{q_\tau} - L_{\text{MA}}\big)$ else | **yes** (gap $= p_\tau D_{\text{KL}}(\tilde p_{\text{tail}}\|\tilde q_{\text{tail}})$) | **yes** |
+| **Normalized top-$k$** | $\bar p_j\big(\log\frac{\bar p_j}{\bar q_j} - D_{\text{KL}}(\bar p \Vert \bar q)\big)$ on $S$, else $0$ | **no** | **no** |
+| **Mass-aware top-$k$** | $p_j\big(\log\frac{p_j}{q_j} - L_{\text{MA}}\big)$ on $S$;  $p_j\big(\log\frac{p_\tau}{q_\tau} - L_{\text{MA}}\big)$ else | **yes** (gap $= p_\tau D_{\text{KL}}(\tilde p_{\text{tail}} \Vert \tilde q_{\text{tail}})$) | **yes** |
 
 The takeaway: if you're going to truncate to top-$k$ for cost reasons, renormalizing is the lossy choice — it silently discards your control over how much mass lives in the head. Keeping the leftover as a single tail category costs you almost nothing (one extra `logsumexp` and a `log1mexp`), turns the objective into a provable lower bound of the full reverse KL, and gives every out-of-top-$k$ logit a gradient that actually corrects the mass budget.
