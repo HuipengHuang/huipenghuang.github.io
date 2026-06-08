@@ -164,6 +164,69 @@ The two objectives differ by one structural choice — renormalize, or add a tai
 
 The honest tradeoff: mass-aware top-$k$ still collapses the tail to one bucket, so it carries no information about *which* tail token the teacher prefers. All outside logits get the same per-unit signal, scaled only by $p_j$. It sits strictly between normalized top-$k$ and full reverse KL — recovering the head/tail mass that normalization discards, while still dropping the intra-tail structure that the full objective keeps. (Normalization's mass-invariance is occasionally what you want — e.g. if you only trust the conditional shape and consider absolute head mass unreliable — but if the goal is to approximate full reverse KL, mass-aware is the better-justified surrogate.)
 
+
+### Experiment
+
+We evaluate mass-aware top-k OPD against normalized top-k OPD in a math distillation setting. The teacher model is **Qwen3-8B**, and the student model is **Qwen3-1.7B-Base**. We use **top-k = 8** teacher probabilities for distillation. The training set is **DAPO-MATH-17K**, and the validation set during training is **MATH-500**. Unless otherwise specified, the maximum generation length is **3072** tokens.
+
+#### Entropy Behavior
+
+A key empirical difference between mass-aware top-k OPD and normalized top-k OPD is their entropy behavior during training.
+
+![Entropy of mass-aware top-k OPD](img.png)
+
+Entropy of mass-aware top-k OPD
+
+![Entropy of normalized top-k OPD](img_1.png)
+
+Entropy of normalized top-k OPD
+
+Mass-aware top-k OPD maintains a healthier entropy trajectory, while normalized top-k OPD leads to extremely large entropy. This difference is important because generation at higher temperature is much more sensitive to the shape of the learned distribution. When the model distribution becomes overly flat, high-temperature sampling further amplifies this uncertainty, making the model more likely to sample low-quality tokens.
+
+This explains why the performance gap becomes especially large at **temperature = 1.0**. Normalized top-k OPD only matches the relative probabilities inside the teacher top-k set after renormalization. It does not constrain how much total probability mass the student assigns to the teacher top-k tokens. Therefore, the student can reduce its probability mass on the teacher top-k set while still matching the normalized top-k proportions. This creates a failure mode where the loss appears small, but the student distribution becomes too diffuse over the full vocabulary.
+
+In contrast, mass-aware top-k OPD preserves the teacher's total top-k mass. It encourages the student to match both:
+
+1. the relative distribution among teacher top-k tokens;
+2. the total probability mass assigned to the teacher top-k set.
+
+As a result, mass-aware top-k OPD avoids the entropy explosion observed in normalized top-k OPD. This leads to more stable sampling behavior and significantly better accuracy, especially under **temperature = 1.0**.
+
+#### Results at Temperature 1.0
+
+At generation temperature **1.0**, mass-aware top-k OPD consistently outperforms normalized top-k OPD on AIME24, AIME25, and MATH-500.
+
+| Dataset | Method | Pass@1 | Pass@16 | N | Avg Gen |
+|---|---:|---:|---:|---:|---:|
+| AIME24 | mass-aware top-k OPD | **7.92%** | **23.33%** | 30 | 16.00 |
+| AIME24 | normalized top-k OPD | 5.00% | 16.67% | 30 | 16.00 |
+| AIME25 | mass-aware top-k OPD | **3.96%** | **16.67%** | 30 | 16.00 |
+| AIME25 | normalized top-k OPD | 2.50% | 13.33% | 30 | 16.00 |
+| MATH-500 | mass-aware top-k OPD | **67.10%** | **89.60%** | 500 | 16.00 |
+| MATH-500 | normalized top-k OPD | 56.67% | 82.60% | 500 | 16.00 |
+
+The improvement is especially clear on MATH-500, where mass-aware top-k OPD improves Pass@1 from **56.67%** to **67.10%**, and Pass@16 from **82.60%** to **89.60%**. This supports the entropy-based explanation above: when normalized top-k OPD produces an overly high-entropy student distribution, sampling at temperature **1.0** becomes unstable. Mass-aware top-k OPD avoids this issue by explicitly controlling the student mass on the teacher top-k set.
+
+#### Results at Temperature 0.7
+
+We also evaluate the two methods at generation temperature **0.7** on a broader set of math benchmarks. Mass-aware top-k OPD still achieves better overall performance.
+
+| Dataset | Mass-aware Avg@16 | Mass-aware Pass@16 | Normalized Avg@16 | Normalized Pass@16 |
+|---|---:|---:|---:|---:|
+| AIME24 | 7.92% | 23.33% | **8.33%** | 23.33% |
+| AIME25 | **6.46%** | **30.00%** | 4.79% | 20.00% |
+| AMC | **33.96%** | 66.27% | 31.48% | **67.47%** |
+| MATH-500 | **69.01%** | **90.80%** | 68.65% | 90.60% |
+| Minerva | **25.80%** | **52.57%** | 24.68% | 51.84% |
+| OlympiadBench | **31.56%** | **59.56%** | 30.16% | 58.22% |
+| Dataset-level average | **29.12%** | **53.75%** | 28.01% | 51.91% |
+
+At temperature **0.7**, the gap is smaller than at temperature **1.0**, but mass-aware top-k OPD still improves the dataset-level average from **28.01%** to **29.12%** on Avg@16, and from **51.91%** to **53.75%** on Pass@16.
+
+This result is also consistent with the entropy analysis. Lower-temperature sampling partially suppresses the harmful effect of an overly high-entropy distribution, so normalized top-k OPD becomes less unstable than at temperature **1.0**. However, mass-aware top-k OPD still gives a more reliable student distribution because it directly constrains the total top-k probability mass instead of only matching normalized top-k proportions.
+
+
+
 ## Summary
 
 All four objectives share the same baseline-subtracted gradient structure; they differ only in *what* they sum over and *what* baseline they subtract.
